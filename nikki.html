@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Nikki AI</title>
+<style>
+  body { margin: 0; font-family: Arial, sans-serif; overflow: hidden; background: #222; color: #fff; }
+  #timetable { position: absolute; top: 10px; left: 10px; background: rgba(0,0,0,0.6); padding: 10px; border-radius: 5px; max-width: 250px; }
+  #voiceBtn { position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%); padding: 10px 20px; background: #0f0; color: #000; border: none; cursor: pointer; font-size: 16px; border-radius:5px; }
+</style>
+</head>
+<body>
+
+<div id="timetable">
+  <h3>Daily Timetable</h3>
+  <ul id="tasks"></ul>
+</div>
+
+<button id="voiceBtn">Talk to Nikki</button>
+
+<canvas id="nikkiCanvas"></canvas>
+
+<script type="module">
+import * as THREE from './three.module.js';
+import { GLTFLoader } from './GLTFLoader.js';
+
+// ----- 3D Scene Setup -----
+const canvas = document.getElementById('nikkiCanvas');
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(50, window.innerWidth/window.innerHeight, 0.1, 1000);
+camera.position.z = 2;
+
+const renderer = new THREE.WebGLRenderer({ canvas, alpha: true, antialias: true });
+renderer.setSize(window.innerWidth, window.innerHeight);
+
+// Light
+const light = new THREE.HemisphereLight(0xffffff, 0x444444);
+light.position.set(0, 1, 1);
+scene.add(light);
+
+let nikki;
+const loader = new GLTFLoader();
+loader.load('./nikki_face.glb', function(gltf) {
+  nikki = gltf.scene;
+  nikki.scale.set(1.5,1.5,1.5);
+  scene.add(nikki);
+  animate();
+}, undefined, function(error) { console.error(error); });
+
+// ----- Animation Loop -----
+function animate() {
+  requestAnimationFrame(animate);
+  // Example eye movement: simple oscillation
+  if(nikki) {
+    const eye = nikki.getObjectByName("Eye_R") || nikki; // replace with actual eye mesh name
+    eye.rotation.y = Math.sin(Date.now()*0.002)*0.2;
+  }
+  renderer.render(scene, camera);
+}
+
+// ----- Persistent Tasks -----
+const tasksUl = document.getElementById('tasks');
+let tasks = JSON.parse(localStorage.getItem('nikkiTasks')) || [
+  {time: "6:00 AM", task: "Wake up"},
+  {time: "7:00 AM", task: "Exercise"},
+  {time: "9:00 AM", task: "Study"}
+];
+function renderTasks() {
+  tasksUl.innerHTML = '';
+  tasks.forEach(t => {
+    const li = document.createElement('li');
+    li.textContent = `${t.time} - ${t.task}`;
+    tasksUl.appendChild(li);
+  });
+}
+renderTasks();
+
+// Add task dynamically
+window.addTask = function(time, task) {
+  tasks.push({time, task});
+  localStorage.setItem('nikkiTasks', JSON.stringify(tasks));
+  renderTasks();
+}
+
+// ----- Voice Command & Response -----
+const btn = document.getElementById('voiceBtn');
+btn.addEventListener('click', () => {
+  const recognition = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
+  recognition.lang = 'en-US';
+  recognition.start();
+  recognition.onresult = (event) => {
+    const speech = event.results[0][0].transcript.toLowerCase();
+    console.log("You said:", speech);
+
+    let reply = "Hi Madhav! Nikki is ready!";
+    if(speech.includes("add task")) {
+      const parts = speech.split("add task ")[1];
+      if(parts) {
+        const [time, ...taskParts] = parts.split(" ");
+        const taskName = taskParts.join(" ");
+        addTask(time, taskName);
+        reply = `Added task ${taskName} at ${time}`;
+      }
+    }
+    speak(reply);
+  }
+});
+
+// Text-to-Speech
+function speak(text) {
+  const synth = window.speechSynthesis;
+  const utterance = new SpeechSynthesisUtterance(text);
+  utterance.lang = 'en-US';
+  synth.speak(utterance);
+}
+
+// ----- Responsive -----
+window.addEventListener('resize', () => {
+  camera.aspect = window.innerWidth/window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+});
+</script>
+
+</body>
+</html>
